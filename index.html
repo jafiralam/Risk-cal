@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Intraday Risk & Position Size Calculator (Groww)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #080d19; --panel: #121a2d; --panel2: #0d1424; --line: #24324b;
+    --text: #edf2ff; --muted: #94a3b8; --green: #10b981; --red: #f43f5e;
+    --blue: #60a5fa; --amber: #f59e0b; --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px;
+    background: radial-gradient(circle at top right, #131e36, #080d19 70%);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: auto; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: clamp(1.35rem, 3.5vw, 1.9rem); margin: 0 0 4px; letter-spacing: -.02em; }
+  .sub { color: var(--muted); margin: 0; font-size: .88rem; }
+  .badge { background: #1e293b; border: 1px solid var(--line); padding: 6px 12px; border-radius: 99px; font-size: .78rem; color: var(--blue); }
+  
+  .layout { display: grid; grid-template-columns: 1fr 1.15fr; gap: 16px; align-items: start; }
+  .panel { background: rgba(18, 26, 45, .95); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: 0 10px 25px #0004; }
+  h2 { margin: 0 0 14px; font-size: 1rem; display: flex; justify-content: space-between; align-items: center; color: #e2e8f0; }
+  
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field.full { grid-column: 1 / -1; }
+  label { display: flex; justify-content: space-between; color: var(--muted); font-size: .78rem; margin-bottom: 5px; }
+  input, select {
+    width: 100%; border: 1px solid #334155; background: var(--panel2);
+    color: var(--text); border-radius: 8px; padding: 9px 10px; font: inherit; outline: none; transition: border .15s;
+  }
+  input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 2px #60a5fa22; }
+  input:disabled { opacity: 0.5; cursor: not-allowed; }
+  .hint { color: var(--muted); font-size: .72rem; margin-top: 4px; }
+  
+  .quick-btns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .chip {
+    font-size: .72rem; padding: 4px 8px; border-radius: 6px; background: #1e293b;
+    border: 1px solid #334155; color: #cbd5e1; cursor: pointer;
+  }
+  .chip:hover { border-color: var(--blue); color: var(--text); }
+  
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel2); border: 1px solid var(--line); padding: 9px 12px; border-radius: 8px;
+  }
+  .toggle-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
+  
+  .results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .metric { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .metric .name { color: var(--muted); font-size: .75rem; margin-bottom: 4px; }
+  .metric .value { font-size: clamp(1rem, 2.2vw, 1.3rem); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .small { font-size: .7rem; color: var(--muted); margin-top: 4px; }
+  
+  .green { color: var(--green); } .red { color: var(--red); } .blue { color: var(--blue); } .amber { color: var(--amber); } .purple { color: var(--purple); }
+  
+  .vis-bar { margin: 14px 0; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .vis-labels { display: flex; justify-content: space-between; font-size: .75rem; margin-bottom: 6px; }
+  .bar-track { height: 8px; border-radius: 99px; background: #1e293b; display: flex; overflow: hidden; }
+  .bar-risk { background: var(--red); height: 100%; transition: width .2s; }
+  .bar-reward { background: var(--green); height: 100%; transition: width .2s; }
+  
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .sub-box { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .sub-box h3 { margin: 0 0 8px; font-size: .82rem; color: #cbd5e1; text-transform: uppercase; letter-spacing: .04em; }
+  
+  .rows { display: grid; gap: 6px; font-size: .82rem; }
+  .row { display: flex; justify-content: space-between; gap: 8px; padding-bottom: 5px; border-bottom: 1px dashed #1e293b; }
+  .row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .row span:first-child { color: var(--muted); }
+  .row strong { font-variant-numeric: tabular-nums; }
+
+  .status { padding: 10px 12px; border-radius: 8px; margin-top: 12px; font-size: .82rem; border: 1px solid #1e3a5f; background: #10233a; color: #bae6fd; }
+  .status.warn { background: #2c2012; border-color: #78531b; color: #fde68a; }
+  .status.bad { background: #2f141e; border-color: #7f1d32; color: #fecdd3; }
+  
+  .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  button {
+    cursor: pointer; border: 1px solid #334155; border-radius: 8px;
+    padding: 8px 13px; color: var(--text); background: #1e293b; font: inherit; font-weight: 500;
+  }
+  button.primary { background: #2563eb; border-color: #3b82f6; }
+  button:hover { filter: brightness(1.12); }
+  
+  .log-panel { margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 10px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th { color: var(--muted); font-weight: 600; background: var(--panel2); }
+  
+  @media(max-width: 860px) { .layout, .grid-2 { grid-template-columns: 1fr; } .results { grid-template-columns: 1fr 1fr; } }
+  @media(max-width: 480px) { .fields, .results { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pro Intraday Risk & Position Calculator</h1>
+      <p class="sub">Dynamic Groww intraday charges · True Net R:R · Scale-out & Daily Drawdown Tracker</p>
+    </div>
+    <div class="badge" id="dailyStatusBadge">Daily Risk Left: ₹300.00</div>
+  </header>
+
+  <div class="layout">
+    <!-- INPUTS PANEL -->
+    <section class="panel">
+      <h2>
+        <span>Trade Parameters</span>
+        <button type="button" class="chip" id="flipDirBtn">⇄ Flip Buy/Sell</button>
+      </h2>
+
+      <div class="fields">
+        <div class="field">
+          <label for="capital">Trading Capital (₹)</label>
+          <input id="capital" type="number" min="100" step="500" value="10000">
+        </div>
+        <div class="field">
+          <label for="riskPct">Risk per Trade (%)</label>
+          <input id="riskPct" type="number" min="0.1" max="20" step="0.1" value="1">
+          <div class="quick-btns">
+            <span class="chip" data-risk="0.5">0.5%</span>
+            <span class="chip" data-risk="1">1%</span>
+            <span class="chip" data-risk="2">2%</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="dailyLimitPct">Max Daily Loss Limit (%)</label>
+          <input id="dailyLimitPct" type="number" min="0.5" max="50" step="0.5" value="3">
+          <div class="hint">Stops overtrading (e.g. 3R per day)</div>
+        </div>
+        <div class="field">
+          <label for="leverage">Intraday Leverage</label>
+          <select id="leverage">
+            <option value="1">1× (Cash / Delivery)</option>
+            <option value="2">2×</option>
+            <option value="3">3×</option>
+            <option value="5" selected>5× (Standard Equity)</option>
+            <option value="8">8×</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="direction">Direction</label>
+          <select id="direction">
+            <option value="long">BUY / Long</option>
+            <option value="short">SELL / Short</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="lotSize">Lot / Step Size</label>
+          <input id="lotSize" type="number" min="1" step="1" value="1">
+        </div>
+
+        <div class="field">
+          <label for="entry">Entry Price (₹)</label>
+          <input id="entry" type="number" min="0.05" step="0.05" value="250">
+        </div>
+        <div class="field">
+          <label for="stop">Stop-Loss Price (₹) <span id="slPctHint" class="red"></span></label>
+          <input id="stop" type="number" min="0.05" step="0.05" value="245">
+          <div class="quick-btns">
+            <span class="chip" data-slpct="0.5">0.5% SL</span>
+            <span class="chip" data-slpct="1">1% SL</span>
+            <span class="chip" data-slpct="1.5">1.5% SL</span>
+          </div>
+        </div>
+
+        <div class="field full">
+          <label for="target">Target Price (₹) <span id="tgPctHint" class="green"></span></label>
+          <input id="target" type="number" min="0.05" step="0.05" value="260">
+          <div class="quick-btns">
+            <span class="chip" data-rr="1.5">Set 1:1.5 R:R</span>
+            <span class="chip" data-rr="2">Set 1:2 R:R</span>
+            <span class="chip" data-rr="3">Set 1:3 R:R</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="extraBuffer">Slippage Buffer (₹/share)</label>
+          <input id="extraBuffer" type="number" min="0" step="0.05" value="0.10">
+        </div>
+        <div class="field">
+          <label for="charges">Total Charges (₹)</label>
+          <input id="charges" type="number" min="0" step="1" value="30" disabled>
+          <div class="hint" id="chargeModeHint">Auto-calculated via Groww structure</div>
+        </div>
+
+        <div class="field full">
+          <div class="toggle-row">
+            <span>Auto-calculate Groww Equity Intraday Charges (Brokerage + STT + GST)</span>
+            <input type="checkbox" id="autoCharges" checked>
+          </div>
+        </div>
+        <div class="field full">
+          <div class="toggle-row">
+            <span><strong>Strict Risk Mode:</strong> Deduct charges from risk budget so total loss ≤ Risk %</span>
+            <input type="checkbox" id="strictRisk" checked>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="primary" id="logTradeBtn">+ Log Planned Trade</button>
+        <button type="button" id="copyBtn">Copy Summary</button>
+        <button type="button" id="resetBtn">Reset Defaults</button>
+      </div>
+    </section>
+
+    <!-- OUTPUTS PANEL -->
+    <section class="panel">
+      <h2>Calculated Sizing & Net Metrics</h2>
+      
+      <div class="results">
+        <div class="metric">
+          <div class="name">Max Safe Quantity</div>
+          <div class="value blue" id="qty">—</div>
+          <div class="small" id="qtyNote">—</div>
+        </div>
+        <div class="metric">
+          <div class="name">Net Loss at SL (After Charges)</div>
+          <div class="value red" id="lossAfter">—</div>
+          <div class="small" id="lossBefore">Gross: —</div>
+        </div>
+        <div class="metric">
+          <div class="name">Net Profit at Target</div>
+          <div class="value green" id="profitAfter">—</div>
+          <div class="small" id="profitBefore">Gross: —</div>
+        </div>
+        <div class="metric">
+          <div class="name">Net R:R (Real)</div>
+          <div class="value purple" id="netRR">—</div>
+          <div class="small" id="grossRR">Gross R:R: —</div>
+        </div>
+        <div class="metric">
+          <div class="name">True Break-Even Price</div>
+          <div class="value amber" id="breakeven">—</div>
+          <div class="small">Includes charges & slippage</div>
+        </div>
+        <div class="metric">
+          <div class="name">Required Win-Rate</div>
+          <div class="value" id="winRate">—</div>
+          <div class="small">To break even long-term</div>
+        </div>
+      </div>
+
+      <!-- VISUAL TRADE BAR -->
+      <div class="vis-bar">
+        <div class="vis-labels">
+          <span class="red" id="visSL">SL: ₹245</span>
+          <span class="amber" id="visBE">BE: ₹250.25</span>
+          <span class="green" id="visTG">Target: ₹260</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-risk" id="barRisk" style="width:33%"></div>
+          <div class="bar-reward" id="barReward" style="width:67%"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- CAPITAL & CHARGES -->
+        <div class="sub-box">
+          <h3>Margin & Groww Charges Breakdown</h3>
+          <div class="rows">
+            <div class="row"><span>Risk Budget Allowed</span><strong id="riskBudget">—</strong></div>
+            <div class="row"><span>Position Value (Turnover/2)</span><strong id="positionValue">—</strong></div>
+            <div class="row"><span>Margin Required</span><strong id="margin">—</strong></div>
+            <div class="row"><span>Free Margin Left</span><strong id="capitalLeft">—</strong></div>
+            <div class="row"><span>Brokerage (Buy + Sell)</span><strong id="brkFee">—</strong></div>
+            <div class="row"><span>STT + Exch + Stamp + SEBI + GST</span><strong id="taxFee">—</strong></div>
+            <div class="row"><span>Total Round-Trip Charges</span><strong class="amber" id="totalChargesOut">—</strong></div>
+          </div>
+        </div>
+
+        <!-- PARTIAL BOOKING / SCALE OUT -->
+        <div class="sub-box">
+          <h3>Scale-Out Plan & Insights</h3>
+          <div class="rows">
+            <div class="row"><span>1:1 Safe Zone Price</span><strong class="blue" id="oneRPrice">—</strong></div>
+            <div class="row"><span>Book 50% Qty at 1:1</span><strong id="halfQty">—</strong></div>
+            <div class="row"><span>Locked Gross Profit at 1:1</span><strong class="green" id="halfProfit">—</strong></div>
+            <div class="row"><span>Max Consecutive Losses / Day</span><strong id="maxStreaks">—</strong></div>
+            <div class="row"><span>Charges as % of Risk Budget</span><strong id="chargeDrag">—</strong></div>
+            <div class="row"><span>ROI on Margin Deployed (Net)</span><strong id="marginRoi">—</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="status" id="status" role="status">Enter trade parameters.</div>
+    </section>
+  </div>
+
+  <!-- TRADE JOURNAL / DAILY TRACKER -->
+  <section class="panel log-panel">
+    <h2>
+      <span>Intraday Session Log (Tracks Daily Risk Limit)</span>
+      <button type="button" class="chip" id="clearLogBtn">Clear Session Log</button>
+    </h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Dir</th>
+            <th>Entry</th>
+            <th>SL</th>
+            <th>Target</th>
+            <th>Qty</th>
+            <th>Net Risk (₹)</th>
+            <th>Net Reward (₹)</th>
+            <th>Net R:R</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr><td colspan="9" style="text-align:center;color:var(--muted);">No trades logged in this session yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const num = id => Number($(id).value);
+  const money = n => Number.isFinite(n) ? n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }) : '—';
+  const fmt = (n, d = 2) => Number.isFinite(n) ? n.toLocaleString('en-IN', { maximumFractionDigits: d }) : '—';
+  const set = (id, val) => { $(id).textContent = val; };
+
+  let sessionTrades = JSON.parse(localStorage.getItem('groww_session_log') || '[]');
+
+  // Accurate Groww Equity Intraday Charge Estimator
+  function estimateGrowwIntradayCharges(qty, buyPrice, sellPrice) {
+    if (qty <= 0) return { brokerage: 0, taxes: 0, total: 0 };
+    const buyVal = qty * buyPrice;
+    const sellVal = qty * sellPrice;
+    const turnover = buyVal + sellVal;
+
+    // Groww Intraday: min(₹20, 0.1% of order value) per executed order
+    const brkBuy = Math.min(20, Math.max(0.05, buyVal * 0.001));
+    const brkSell = Math.min(20, Math.max(0.05, sellVal * 0.001));
+    const brokerage = brkBuy + brkSell;
+
+    // STT: 0.025% on sell side only for intraday equity
+    const stt = sellVal * 0.00025;
+    // NSE Exchange Txn Charge: ~0.00297% of turnover
+    const exch = turnover * 0.0000297;
+    // SEBI Turnover fee: 0.0001%
+    const sebi = turnover * 0.000001;
+    // Stamp duty: 0.003% on buy side
+    const stamp = buyVal * 0.00003;
+    // GST: 18% on (Brokerage + Exchange + SEBI)
+    const gst = 0.18 * (brokerage + exch + sebi);
+
+    const taxes = stt + exch + sebi + stamp + gst;
+    return { brokerage, taxes, total: brokerage + taxes };
+  }
+
+  let currentCalc = null;
+
+  function calculate() {
+    const capital = num('capital');
+    const riskPct = num('riskPct');
+    const dailyLimitPct = num('dailyLimitPct');
+    const lev = num('leverage');
+    const dir = $('direction').value;
+    const lot = Math.max(1, Math.floor(num('lotSize')));
+    const entry = num('entry');
+    const stop = num('stop');
+    const target = num('target');
+    const buffer = Math.max(0, num('extraBuffer'));
+    const autoCharges = $('autoCharges').checked;
+    const strictRisk = $('strictRisk').checked;
+
+    $('charges').disabled = autoCharges;
+
+    // Save preferences
+    localStorage.setItem('groww_calc_prefs', JSON.stringify({
+      capital, riskPct, dailyLimitPct, lev, dir, lot, entry, stop, target, buffer, autoCharges, strictRisk
+    }));
+
+    // Update SL and Target % hints
+    if (entry > 0 && stop > 0) {
+      const slDistPct = (Math.abs(entry - stop) / entry) * 100;
+      set('slPctHint', `(${fmt(slDistPct, 2)}%)`);
+    }
+    if (entry > 0 && target > 0) {
+      const tgDistPct = (Math.abs(target - entry) / entry) * 100;
+      set('tgPctHint', `(${fmt(tgDistPct, 2)}%)`);
+    }
+
+    const validDirection = dir === 'long' ? (stop < entry && target > entry) : (stop > entry && target < entry);
+    const validNums = capital > 0 && riskPct > 0 && entry > 0 && stop > 0 && target > 0;
+
+    const status = $('status');
+    if (!validDirection || !validNums) {
+      status.className = 'status bad';
+      status.textContent = dir === 'long'
+        ? 'Invalid BUY setup: Stop-Loss must be strictly BELOW Entry, and Target ABOVE Entry.'
+        : 'Invalid SELL setup: Stop-Loss must be strictly ABOVE Entry, and Target BELOW Entry.';
+      currentCalc = null;
+      return;
+    }
+
+    const budget = (capital * riskPct) / 100;
+    const priceRisk = Math.abs(entry - stop);
+    const unitRisk = priceRisk + buffer;
+    const unitReward = Math.abs(target - entry);
+    const buyingPower = capital * lev;
+    const maxPowerQty = Math.floor((buyingPower / entry) / lot) * lot;
+
+    // Iterative sizing so dynamic charges + strict risk mode converge accurately
+    let rawRiskQty = Math.floor((budget / unitRisk) / lot) * lot;
+    let qty = Math.max(0, Math.min(rawRiskQty, maxPowerQty));
+
+    let feeObj = { brokerage: 0, taxes: 0, total: num('charges') };
+
+    for (let i = 0; i < 4; i++) {
+      const slExitPrice = stop;
+      if (autoCharges) {
+        const buyP = dir === 'long' ? entry : slExitPrice;
+        const sellP = dir === 'long' ? slExitPrice : entry;
+        feeObj = estimateGrowwIntradayCharges(qty, buyP, sellP);
+      } else {
+        feeObj = { brokerage: num('charges'), taxes: 0, total: num('charges') };
+      }
+
+      if (strictRisk) {
+        const effectiveBudget = Math.max(0, budget - feeObj.total);
+        const strictQty = Math.floor((effectiveBudget / unitRisk) / lot) * lot;
+        qty = Math.max(0, Math.min(strictQty, maxPowerQty));
+      }
+    }
+
+    // Recompute final charges for chosen qty
+    if (autoCharges) {
+      const buyP = dir === 'long' ? entry : stop;
+      const sellP = dir === 'long' ? stop : entry;
+      feeObj = estimateGrowwIntradayCharges(qty, buyP, sellP);
+      $('charges').value = feeObj.total.toFixed(2);
+    }
+
+    const charges = feeObj.total;
+    const position = qty * entry;
+    const margin = position / lev;
+    const grossLoss = qty * unitRisk; // includes slippage buffer
+    const netLoss = qty > 0 ? grossLoss + charges : 0;
+    const grossProfit = qty * Math.max(0, unitReward - buffer);
+    const netProfit = qty > 0 ? grossProfit - charges : 0;
+
+    const grossRR = unitReward / unitRisk;
+    const netRR = netLoss > 0 ? netProfit / netLoss : 0;
+    const reqWinRate = netRR > 0 ? (1 / (1 + netRR)) * 100 : 100;
+
+    const perUnitCost = qty > 0 ? (charges / qty) + buffer : 0;
+    const breakEven = qty > 0 ? (dir === 'long' ? entry + perUnitCost : entry - perUnitCost) : NaN;
+    const oneRPrice = dir === 'long' ? entry + unitRisk : entry - unitRisk;
+    const halfQty = Math.floor((qty / 2) / lot) * lot;
+    const halfProfit = halfQty * priceRisk;
+    const chargeDragPct = budget > 0 ? (charges / budget) * 100 : 0;
+    const marginRoi = margin > 0 ? (netProfit / margin) * 100 : 0;
+    const maxStreaks = netLoss > 0 ? Math.floor(((capital * dailyLimitPct) / 100) / netLoss) : 0;
+
+    // Populate UI
+    set('qty', fmt(qty, 0));
+    set('qtyNote', qty === 0 ? 'Risk budget too tight' : (qty === maxPowerQty ? 'Capped by Margin/Leverage' : (strictRisk ? 'Strict Risk (incl. charges)' : 'Risk-sized (excl. charges)')));
+    set('lossAfter', money(netLoss));
+    set('lossBefore', `Gross + Slippage: ${money(grossLoss)}`);
+    set('profitAfter', money(netProfit));
+    set('profitBefore', `Gross: ${money(qty * unitReward)}`);
+    set('netRR', netRR > 0 ? `1 : ${fmt(netRR, 2)}` : 'Negative');
+    set('grossRR', `Gross: 1 : ${fmt(grossRR, 2)}`);
+    set('breakeven', qty > 0 ? money(breakEven) : '—');
+    set('winRate', netProfit > 0 ? `${fmt(reqWinRate, 1)}%` : 'N/A');
+
+    set('riskBudget', money(budget));
+    set('positionValue', money(position));
+    set('margin', money(margin));
+    set('capitalLeft', money(capital - margin));
+    set('brkFee', money(feeObj.brokerage));
+    set('taxFee', money(feeObj.taxes));
+    set('totalChargesOut', money(charges));
+
+    set('oneRPrice', money(oneRPrice));
+    set('halfQty', `${fmt(halfQty, 0)} shares`);
+    set('halfProfit', money(halfProfit));
+    set('maxStreaks', `${maxStreaks} trades`);
+    set('chargeDrag', `${fmt(chargeDragPct, 1)}% of budget`);
+    set('marginRoi', `${fmt(marginRoi, 2)}%`);
+
+    // Visual Bar Update
+    set('visSL', `SL: ₹${fmt(stop, 2)}`);
+    set('visBE', `True BE: ₹${qty > 0 ? fmt(breakEven, 2) : '—'}`);
+    set('visTG', `TG: ₹${fmt(target, 2)}`);
+    const totalSpan = unitRisk + unitReward;
+    const riskW = Math.min(85, Math.max(15, (unitRisk / totalSpan) * 100));
+    $('barRisk').style.width = `${riskW}%`;
+    $('barReward').style.width = `${100 - riskW}%`;
+
+    // Warnings & Diagnostics
+    status.className = 'status';
+    const warnings = [];
+    if (qty === 0) {
+      status.className = 'status bad';
+      warnings.push('Zero quantity! Your risk budget (after charges) cannot afford even 1 lot/share with this stop-loss distance.');
+    } else {
+      if (chargeDragPct > 25) {
+        status.className = 'status warn';
+        warnings.push(`High Charge Drag: Charges eat up ${fmt(chargeDragPct, 1)}% of your risk budget. Avoid tight scalps on small capital.`);
+      }
+      if (netRR < 1.2) {
+        status.className = 'status warn';
+        warnings.push(`Low Net R:R (1:${fmt(netRR, 2)}). After charges & slippage, you need a ${fmt(reqWinRate, 1)}% win rate just to break even.`);
+      }
+      if (netProfit <= 0) {
+        status.className = 'status bad';
+        warnings.push('Unviable trade: Target profit does not even cover brokerage, taxes, and slippage.');
+      }
+    }
+    status.textContent = warnings.length ? warnings.join(' | ') : `Setup is clean. True net risk is ${fmt((netLoss / capital) * 100, 2)}% of capital with a 1:${fmt(netRR, 2)} Net R:R.`;
+
+    currentCalc = { dir: dir.toUpperCase(), entry, stop, target, qty, netLoss, netProfit, netRR };
+    updateDailyTracker();
+  }
+
+  function updateDailyTracker() {
+    const capital = num('capital');
+    const dailyLimit = (capital * num('dailyLimitPct')) / 100;
+    const usedRisk = sessionTrades.reduce((acc, t) => acc + t.netLoss, 0);
+    const left = dailyLimit - usedRisk;
+    const badge = $('dailyStatusBadge');
+    badge.textContent = `Daily Risk Left: ${money(left)} / ${money(dailyLimit)}`;
+    badge.style.color = left <= 0 ? 'var(--red)' : (left < dailyLimit * 0.35 ? 'var(--amber)' : 'var(--blue)');
+
+    const tbody = $('logBody');
+    if (!sessionTrades.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);">No trades logged in this session yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sessionTrades.map((t, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td><strong>${t.dir}</strong></td>
+        <td>₹${fmt(t.entry)}</td>
+        <td class="red">₹${fmt(t.stop)}</td>
+        <td class="green">₹${fmt(t.target)}</td>
+        <td>${t.qty}</td>
+        <td class="red">${money(t.netLoss)}</td>
+        <td class="green">${money(t.netProfit)}</td>
+        <td>1:${fmt(t.netRR, 2)}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Event Listeners
+  ['capital', 'riskPct', 'dailyLimitPct', 'leverage', 'direction', 'lotSize', 'entry', 'stop', 'target', 'extraBuffer', 'charges', 'autoCharges', 'strictRisk']
+    .forEach(id => $(id).addEventListener('input', calculate));
+
+  // Quick Risk Chips
+  document.querySelectorAll('[data-risk]').forEach(btn => {
+    btn.addEventListener('click', () => { $('riskPct').value = btn.dataset.risk; calculate(); });
+  });
+
+  // Quick SL % Chips
+  document.querySelectorAll('[data-slpct]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entry = num('entry');
+      const pct = Number(btn.dataset.slpct) / 100;
+      const dir = $('direction').value;
+      const rawSL = dir === 'long' ? entry * (1 - pct) : entry * (1 + pct);
+      $('stop').value = (Math.round(rawSL * 20) / 20).toFixed(2);
+      calculate();
+    });
+  });
+
+  // Quick R:R Target Chips
+  document.querySelectorAll('[data-rr]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entry = num('entry'), stop = num('stop'), rr = Number(btn.dataset.rr);
+      const dist = Math.abs(entry - stop);
+      const dir = $('direction').value;
+      const rawTg = dir === 'long' ? entry + dist * rr : entry - dist * rr;
+      $('target').value = (Math.round(rawTg * 20) / 20).toFixed(2);
+      calculate();
+    });
+  });
+
+  // Flip Buy/Sell Direction and mirror SL/Target automatically
+  $('flipDirBtn').addEventListener('click', () => {
+    const entry = num('entry'), stop = num('stop'), target = num('target');
+    const slDist = Math.abs(entry - stop), tgDist = Math.abs(target - entry);
+    const newDir = $('direction').value === 'long' ? 'short' : 'long';$('direction').value = newDir;
+    $('stop').value = (newDir === 'long' ? entry - slDist : entry + slDist).toFixed(2);
+    $('target').value = (newDir === 'long' ? entry + tgDist : entry - tgDist).toFixed(2);
+    calculate();
+  });
+
+  $('logTradeBtn').addEventListener('click', () => {
+    if (!currentCalc || currentCalc.qty <= 0) return;
+    sessionTrades.push(currentCalc);
+    localStorage.setItem('groww_session_log', JSON.stringify(sessionTrades));
+    updateDailyTracker();
+  });
+
+  $('clearLogBtn').addEventListener('click', () => {
+    sessionTrades = [];
+    localStorage.removeItem('groww_session_log');
+    updateDailyTracker();
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    localStorage.removeItem('groww_calc_prefs');
+    const defaults = { capital: 10000, riskPct: 1, dailyLimitPct: 3, leverage: 5, direction: 'long', lotSize: 1, entry: 250, stop: 245, target: 260, extraBuffer: 0.10 };
+    Object.entries(defaults).forEach(([k, v]) => $(k).value = v);$('autoCharges').checked = true;
+    $('strictRisk').checked = true;
+    calculate();
+  });
+
+  $('copyBtn').addEventListener('click', async () => {
+    const text = [
+      `Trade Plan (${$('direction').value.toUpperCase()})`,
+      `Entry: ₹${$('entry').value} | SL: ₹${$('stop').value} | Target: ₹${$('target').value}`,
+      `Qty: ${$('qty').textContent} | Margin: ${$('margin').textContent}`,
+      `Net Loss (incl. charges): ${$('lossAfter').textContent}`,
+      `Net Profit (after charges): ${$('profitAfter').textContent}`,
+      `Net R:R: ${$('netRR').textContent} | True Breakeven: ${$('breakeven').textContent}`
+    ].join('\n');
+    await navigator.clipboard.writeText(text);
+    $('copyBtn').textContent = 'Copied!';
+    setTimeout(() => $('copyBtn').textContent = 'Copy Summary', 1400);
+  });
+
+  // Load saved preferences on boot
+  const saved = JSON.parse(localStorage.getItem('groww_calc_prefs') || 'null');
+  if (saved) {
+    ['capital', 'riskPct', 'dailyLimitPct', ' entry', 'stop', 'target', 'lotSize', 'extraBuffer'].forEach(k => {
+      if (saved[k.trim()] !== undefined && $(k.trim()))$(k.trim()).value = saved[k.trim()];
+    });
+    if (saved.lev) $('leverage').value = saved.lev;
+    if (saved.dir) $('direction').value = saved.dir;
+    if (typeof saved.autoCharges === 'boolean') $('autoCharges').checked = saved.autoCharges;
+    if (typeof saved.strictRisk === 'boolean') $('strictRisk').checked = saved.strictRisk;
+  }
+
+  calculate();
+})();
+</script>
+</body>
+</html>
